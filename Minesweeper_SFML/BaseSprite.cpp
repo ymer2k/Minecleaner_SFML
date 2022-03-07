@@ -9,7 +9,6 @@ BaseSprite::BaseSprite(TextureHolder& texture):
 	m_textureSize = m_textureHolder.get(TextureHolder::ID::COMBINED).getSize();
 	m_pieceTextureSize.x = m_textureSize.x / 4; // combined texture has 4 rows
 	m_pieceTextureSize.y = m_textureSize.y / 4; // combined texture has 4 collumns
-
 }
 
 sf::Sprite BaseSprite::getSprite()
@@ -23,11 +22,6 @@ void BaseSprite::setPosition(sf::Vector2f pos)
 	m_sprite.setPosition(pos.x, pos.y);
 }
 
-//void BaseSprite::setTexture(TextureHolder& texture)
-//{
-//	m_textureHolder = texture;
-//}
-
 sf::Vector2u BaseSprite::getTexturePixelSize()
 {
 	return m_pieceTextureSize;
@@ -37,7 +31,6 @@ void BaseSprite::loadSprite(TextureHolder::ID id)
 {
 	//For sprite 
 	m_sprite.setTexture(m_textureHolder.get(id));
-
 }
 
 void BaseSprite::loadTransparentSprite()
@@ -52,8 +45,12 @@ void BaseSprite::setScale(float x, float y)
 
 void BaseSprite::setOrigin(float x, float y)
 {
-	//std::cout << m_sprite.getOrigin().x << std::endl;
 	m_sprite.setOrigin(x, y);
+}
+
+void BaseSprite::setTextureRectFunc(sf::IntRect intRect)
+{
+	m_sprite.setTextureRect(intRect);
 }
 
 void BaseSprite::setId(cellId id)
@@ -68,13 +65,11 @@ BaseSprite::cellId BaseSprite::getId()
 
 void BaseSprite::setSprite(BaseSprite::cellId type)
 {
-
 	switch (type)
 	{
 	case cellId::UNPRESSED:
 		m_sprite.setTextureRect(sf::IntRect(0, 0, m_pieceTextureSize.x, m_pieceTextureSize.y));
 		break;
-
 	case cellId::PRESSED:
 		m_sprite.setTextureRect(sf::IntRect(32, 0, m_pieceTextureSize.x, m_pieceTextureSize.y));
 		break;
@@ -114,7 +109,6 @@ void BaseSprite::setSprite(BaseSprite::cellId type)
 	case cellId::FALSE:
 		m_sprite.setTextureRect(sf::IntRect(32 * 1, 32 * 3, m_pieceTextureSize.x, m_pieceTextureSize.y));
 		break;
-
 	default:
 		break;
 	}

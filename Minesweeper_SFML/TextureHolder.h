@@ -16,6 +16,7 @@ public:
 		COMBINED
 		,SMILEY_COMBINED
 		, NUMBERS
+		, TITLE
 	};
 
 	// given the ID and filename we "load" the map with the requested texture.

@@ -1,13 +1,15 @@
 #pragma once
-#include <SFML/Graphics.hpp>
-#include "TextureHolder.h"
+#include "BaseSprite.h"
 
-class BaseSprite
+
+class Numbers
 {
 public:
-	BaseSprite(TextureHolder & texture);
+	Numbers(TextureHolder& texture);
+
 	sf::Sprite getSprite(); // position is in here
 	void setPosition(sf::Vector2f pos);
+	//void setTexture(TextureHolder& texture);
 	sf::Vector2u getTexturePixelSize();
 	void loadSprite(TextureHolder::ID id);
 	void loadTransparentSprite();
@@ -15,9 +17,10 @@ public:
 	void setOrigin(float x, float y);
 	void setTextureRectFunc(sf::IntRect intRect);
 
-	enum class cellId
+	enum class numberId
 	{
-		NO_ID
+		
+		 ZERO
 		, ONE
 		, TWO
 		, THREE
@@ -26,18 +29,12 @@ public:
 		, SIX
 		, SEVEN
 		, EIGHT
-		, UNPRESSED
-		, PRESSED
-		, DETONATED
-		, MINE
-		, FLAG
-		, FALSE
+		, NINE
+		, DASH
+		, NO_NUMBER
 
 	};
-
-	void setId(cellId id);
-	cellId getId();
-	void setSprite(BaseSprite::cellId type);
+	void setNumberSprite(numberId type);
 
 private:
 	// member variables
@@ -48,7 +45,6 @@ private:
 	sf::Vector2u m_pieceTextureSize;
 	sf::Vector2u m_textureSize;
 	sf::Vector2f m_pos;
-	cellId m_id;
 
 	// member functions
 };

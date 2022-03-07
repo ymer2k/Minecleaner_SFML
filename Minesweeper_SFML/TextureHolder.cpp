@@ -27,6 +27,11 @@ void TextureHolder::load(ID id, const sf::Image image)
 sf::Texture& TextureHolder::get(ID id)
 {
 	auto found = m_textureMap.find(id);
+
+	if (found == m_textureMap.end())
+	{
+		throw std::invalid_argument("No such ID found");
+	}
 	return *found->second;
 }
 

@@ -3,7 +3,7 @@
 Render::Render()
 {
 	m_window.create(sf::VideoMode(800, 600), "MineCleaner"); // The create  function is used when we create the window AFTER initilization.
-
+	m_window.setVerticalSyncEnabled(true);
 	sf::View view = m_window.getView();
 	view.setSize(800, 600);
 	m_window.setView(view);

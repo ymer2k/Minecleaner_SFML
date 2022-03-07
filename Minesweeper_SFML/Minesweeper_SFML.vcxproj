@@ -149,6 +149,7 @@
     <ClCompile Include="FontHolder.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Numbers.cpp" />
     <ClCompile Include="Render.cpp" />
     <ClCompile Include="TextureHolder.cpp" />
   </ItemGroup>
@@ -156,6 +157,7 @@
     <ClInclude Include="BaseSprite.h" />
     <ClInclude Include="FontHolder.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="Numbers.h" />
     <ClInclude Include="Render.h" />
     <ClInclude Include="TextureHolder.h" />
   </ItemGroup>

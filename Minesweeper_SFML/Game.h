@@ -5,20 +5,16 @@
 #include "BaseSprite.h"
 #include "FontHolder.h"
 #include "TextureHolder.h"
-
+#include "numbers.h"
 
 class Game
 {
 public:
 	Game();
-
 	void update(sf::Time dt, sf::RenderWindow& window);
 	void drawGame(sf::RenderWindow& window);
 	void interact(sf::RenderWindow& window);
-
-
 private:
-
 	enum class gameStates
 	{
 		chooseDifficulty, // Easy 10x8 // medium 15,12, hard 20x16,  expert 25x20
@@ -26,23 +22,17 @@ private:
 		gameOver,
 	};
 
-	
 	sf::Vector2f m_worldMousePosClick;
+	sf::Vector2f m_gameRegionMousePosClick;
 	sf::Vector2i m_worldMousePos;
-
 	sf::Vector2f m_worldMousePosClickRight;
 
 	enum gameStates m_state;
-
 	sf::Vector2i m_boardSize;
-
 	int m_numberOfMines;
 
 	// Used for the floodFill to see if square has been visited by the algo. Should be OK to use this vector to decide which cells to reveal.
 	std::vector<bool> m_visited;
-
-	// 
-	
 
 	// Vector to keep all cells that will be drawn.
 	std::vector<BaseSprite> m_cellVector;
@@ -50,8 +40,6 @@ private:
 	TextureHolder m_textureHolder;
 	//Hold all Text objects
 	std::vector<sf::Text> m_textVector;
-
-	sf::Text m_text;
 
 	// Vector that hold where the mines are located
 	std::vector<BaseSprite::cellId> m_cellTypeVector;
@@ -62,15 +50,29 @@ private:
 	// smiley sprite
 	sf::Sprite m_smileySprite;
 
-	// mine Number sprites
-	sf::Sprite m_100Number;
-	sf::Sprite m_10Number;
-	sf::Sprite m_1Number;
+	// Title sprite
+	sf::Sprite m_titleSprite;
 
-	
+	// mine Number sprites
+	Numbers m_1numberMine;
+	Numbers m_10numberMine;
+	Numbers m_100numberMine;
+
+	// Time Number sprites
+	Numbers m_1numberTime;
+	Numbers m_10numberTime;
+	Numbers m_100numberTime;
+		
 	// amount of flags placed
 	int m_nrOfFlags;
 
+	// Views
+	sf::View m_wholeWindowView;
+	sf::View m_gameRegionView;
+
+	bool m_gameIsLost;
+
+	sf::Clock m_timer;
 
 	// METHODS
 
@@ -118,15 +120,20 @@ private:
 	void putFlagsOnRemaningCells();
 
 	// init numbers
-	void initNumbers();
+	void initNumbers(sf::RenderWindow& window);
 
-	// Choose right number go
+	// init topBar
+	void initTopBar(sf::RenderWindow& window);
 
+	// init titleSprite
+	void initTitleSprite();
 
+	// get the bounds of a view.
+	sf::FloatRect getViewBounds(const sf::View& view);
 
+	// set correctNumberSpriteTexture overloaded
+	void setCorrectMineNumberSpriteTexture(int number, Numbers & number100, Numbers & number10, Numbers & number1);
 
-
-
-
-
+	// function to convert char to numberOfmines - numberOfFlags to Numbers::numberId
+	Numbers::numberId convertCharNrToNumberId(char c);
 };

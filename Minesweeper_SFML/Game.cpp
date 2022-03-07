@@ -2,20 +2,22 @@
 #include "math.h"
 #include <iostream>
 #include <stdlib.h>
-
-
-
+#include "Numbers.h"
 
 Game::Game():
     m_state(Game::gameStates::chooseDifficulty)
     , m_worldMousePosClickRight(-1.0f,-1.0f)
+    , m_gameRegionMousePosClick(-1.0f,-1.0f)
+    , m_gameIsLost(false)
+    , m_1numberMine(m_textureHolder)
+    , m_10numberMine(m_textureHolder)
+    , m_100numberMine(m_textureHolder)
+    , m_1numberTime(m_textureHolder)
+    , m_10numberTime(m_textureHolder)
+    , m_100numberTime(m_textureHolder)
 {
     //Load text font
     m_fonts.load(FontHolder::FontID::PixelFont, "Fonts/slkscre.ttf");
-    //Create and put text in array  
-    // Put this shit in the Game constructor in a init() function
-
-
 
     //Huge Title text
 
@@ -51,7 +53,6 @@ Game::Game():
     expert.setCharacterSize(15);
     m_textVector.emplace_back(expert);
 
-
     // Setup Cell vector
     m_textureHolder.load(TextureHolder::ID::COMBINED, "textures/combined.png");
 
@@ -61,19 +62,13 @@ Game::Game():
     // Setup numbers texture
     m_textureHolder.load(TextureHolder::ID::NUMBERS, "textures/numbers.png");
 
-    // Setup top Rectangle
-    m_topBar.setSize(sf::Vector2f(320, 60));
-    m_topBar.setPosition(0, 256);
-    m_topBar.setFillColor(sf::Color::White);
+    // Setup title texture
+    m_textureHolder.load(TextureHolder::ID::TITLE, "textures/title.png");
 
-    // Setup smiley
-    //m_smiley.loadSprite(TextureHolder::ID::SMILEY_COMBINED);
-    //m_smiley.setPosition(sf::Vector2f(m_boardSize.x * 32 / 2, m_boardSize.y + 6));
+    // set title texture
+    m_titleSprite.setTexture(m_textureHolder.get(TextureHolder::ID::TITLE));
+    m_titleSprite.setPosition(sf::Vector2f(250, 250));
 
-
-    //m_smileySprite.setTexture(m_textureHolder.get(TextureHolder::ID::SMILEY_COMBINED));
-    //m_smileySprite.setTextureRect(sf::IntRect(0, 0, 48, 48));
-    //m_smileySprite.setPosition(sf::Vector2f(320 / 2-24, 256 + 6));
 }
 
 void Game::update(sf::Time dt, sf::RenderWindow& window)
@@ -84,7 +79,6 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
     {
         // Put into function choose difficulty
         m_worldMousePos = sf::Mouse::getPosition(window); // Current mouse position
-        //std::cout << m_worldMousePos.x << " - " << m_worldMousePos.y << std::endl;
 
         for (auto &text : m_textVector)
         {
@@ -113,7 +107,6 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
                     m_boardSize.x = 15;
                     m_boardSize.y = 12;
                     m_numberOfMines = 27;
-                   
                 }
                 else if (string == "Hard")
                 {
@@ -121,7 +114,6 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
                     m_boardSize.x = 20;
                     m_boardSize.y = 16;
                     m_numberOfMines = 64;
-
                 }
                 else if (string == "Expert") // 20% mines i.e. 100 mines
                 {
@@ -129,30 +121,34 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
                     m_boardSize.x = 25;
                     m_boardSize.y = 20;
                     m_numberOfMines = 100;
-
                 }
+                //resize view This will set the size of the current view to the whole window!
+                sf::FloatRect visibleArea(0, 0, window.getSize().x, window.getSize().y);
+                window.setView(sf::View(visibleArea));
+                m_wholeWindowView = window.getView(); // Since the current view (the default view) is already set we take that size and copy it to m_wholeWindowView
+
                 m_visited.resize(m_boardSize.x * m_boardSize.y);
-                m_state = Game::gameStates::gamePlay;
                 initCellVector();
                 initSmiley();
-                // Generate mine positions randomly
                 m_cellTypeVector.resize(m_boardSize.x * m_boardSize.y);
                 generateMines();
                 generateRemaningCells();
-                initNumbers();
-                // Generate Numbers below each cell.
-                // check index (0,0) check squares all around that index and count number of mines it touches. put the corresponding number on that index.
+                initNumbers(window);
+                initTopBar(window);
+                m_timer.restart();
+                m_state = Game::gameStates::gamePlay;
                 return;
-                // MOve to Gameplay, set the window size and game size and everything depending on which difficulty we chose! window.setSize() etc
             }
         }
         break;
     }
 
-
     case Game::gameStates::gamePlay:
     {
-        //if (checkBounds(m_worldMousePosClick, m_smileySprite.getGlobalBounds()))
+        int timeElapsed = (int)m_timer.getElapsedTime().asSeconds();
+        m_worldMousePos = sf::Mouse::getPosition(window); // Current mouse position
+
+        // change smiley texture when we click
         if(sf::Mouse::isButtonPressed(sf::Mouse::Left))
         {
             m_smileySprite.setTextureRect(sf::IntRect(48, 48, 48, 48));
@@ -160,21 +156,16 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
         }else
             m_smileySprite.setTextureRect(sf::IntRect(0, 0, 48, 48));
 
-    
         static int unpressedCells = 0;
-        // CHeck which cell we click on 
-        //TODO: (only do this when we actually click)
+        // Check which cell we click on 
         m_nrOfFlags = 0;
         for (int i = 0; i < (m_boardSize.x * m_boardSize.y); i++)
         {
-            if (m_cellVector[i].getId() == BaseSprite::cellId::FLAG) // Count number of flags
-            {
+            if (m_cellVector[i].getId() == BaseSprite::cellId::FLAG)
                 m_nrOfFlags++;
-            }
-
-            if (checkBounds(m_worldMousePosClick, m_cellVector[i].getSprite().getGlobalBounds())) // Look for the cell we clicked on
+            
+            if (checkBounds(m_gameRegionMousePosClick, m_cellVector[i].getSprite().getGlobalBounds())) // Look for the cell we clicked on
             {
-                
                 // If we pressed on an empty square that has cell is PRESSED then we should reveal all connecting PRESSED squares!
                 if(m_cellTypeVector[i] == BaseSprite::cellId::PRESSED)
                 {
@@ -184,35 +175,40 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
                 {
                     // Game Over
                     // Set the index to detonated mine 
+                    // Count final nr of flags for Numbers
                     // Reveal the remaning bombs
                     // Mark flags placed wrong
                     // move to Game over Screen
+                    m_nrOfFlags = 0;
+                    for (int m = 0; m < (m_boardSize.x * m_boardSize.y); m++)
+                    {
+                        // count nr of flags to correctly display estimated number of mines left numbers when game over.
+                        if (m_cellVector[m].getId() == BaseSprite::cellId::FLAG)
+                            m_nrOfFlags++;
+                    }
                     revealMines();
                     m_cellTypeVector[i] = BaseSprite::cellId::DETONATED;
+                    m_gameIsLost = true;
                     // Set dead smiley
                     m_smileySprite.setTextureRect(sf::IntRect(48, 0, 48, 48));
                     m_state = Game::gameStates::gameOver;
-                    // Look for false Flags
                     for (int m = 0; m < (m_boardSize.x * m_boardSize.y); m++)
                     {
+                        // Look for false flags
                         if (m_cellVector[m].getId() == BaseSprite::cellId::FLAG && m_cellTypeVector[m] != BaseSprite::cellId::MINE)
-                        {
                             m_cellVector[m].setSprite(BaseSprite::cellId::FALSE);
-                        }
-                    }
-
-                    
+                    }                 
                 }
                 m_cellVector[i].setSprite(m_cellTypeVector[i]); // Set the correct sprite of the clicked cell.
-                m_worldMousePosClick = sf::Vector2f(-1, -1); //reset
+                m_gameRegionMousePosClick = sf::Vector2f(-1, -1); //reset
                 break; // stop the loop since we found the one we clicked on
             }
+            // check if we riht clicked on a cell
             if (checkBounds(m_worldMousePosClickRight, m_cellVector[i].getSprite().getGlobalBounds()))
             {
                 // If there is already a flag, just remove it and replace with the unpressed sprite.
                 if (m_cellVector[i].getId() == BaseSprite::cellId::FLAG)
-                {
-                    
+                {                    
                     m_cellVector[i].setSprite(BaseSprite::cellId::UNPRESSED);
                     m_worldMousePosClickRight = sf::Vector2f(-1, -1); //reset
                     break;
@@ -220,51 +216,43 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
                 // Only place flags on UNPRESSED cells
                 else if (m_cellVector[i].getId() == BaseSprite::cellId::UNPRESSED)
                 {
-                    
                     m_cellVector[i].setSprite(BaseSprite::cellId::FLAG); // Set the correct sprite of the clicked cell.
                     m_worldMousePosClickRight = sf::Vector2f(-1, -1); //reset
-
                     break; // stop the loop since we found the one we clicked on
                 }
-
             }
-
-
-
         }
+        setCorrectMineNumberSpriteTexture(m_numberOfMines - m_nrOfFlags, m_100numberMine, m_10numberMine, m_1numberMine);
+        setCorrectMineNumberSpriteTexture(timeElapsed, m_100numberTime, m_10numberTime, m_1numberTime);
 
         // check if game is won
-        for (int i = 0; i < (m_boardSize.x * m_boardSize.y); i++)
-        {
-            if (m_cellVector[i].getId() == BaseSprite::cellId::UNPRESSED || m_cellVector[i].getId() == BaseSprite::cellId::FLAG)
+        if (!m_gameIsLost) // only do this check if game has not already been lost
+        {        
+            for (int i = 0; i < (m_boardSize.x * m_boardSize.y); i++)
             {
-                unpressedCells++;
+                if (m_cellVector[i].getId() == BaseSprite::cellId::UNPRESSED || m_cellVector[i].getId() == BaseSprite::cellId::FLAG)
+                    unpressedCells++;
             }
+
+            if (unpressedCells == m_numberOfMines)
+            {
+                // Victory! Move to gameOver screen
+                m_smileySprite.setTextureRect(sf::IntRect(0, 48, 48, 48));
+                putFlagsOnRemaningCells();
+                m_state = Game::gameStates::gameOver;
+                m_nrOfFlags = m_numberOfMines; // Just to make sure we display the correct nr here because we automatically set flags
+           // when we finish the game when unpressed cells == numberOfMines.
+            }
+            else
+                unpressedCells = 0;        
         }
-
-        if (unpressedCells == m_numberOfMines)
-        {
-            // Victory! Move to gameOver screen
-            m_smileySprite.setTextureRect(sf::IntRect(0, 48, 48, 48));
-            putFlagsOnRemaningCells();
-            m_state = Game::gameStates::gameOver;
-
-        }
-        else
-            unpressedCells = 0;
-        
-
-
-
-
         break;
     }
     case Game::gameStates::gameOver:
         if (checkBounds(m_worldMousePosClick, m_smileySprite.getGlobalBounds()))
         {
-            //Reset everything
-            // generate new mines
-            // Change back to happy smiley
+            m_worldMousePosClick.x = -1;
+            m_worldMousePosClick.y = -1;
             resetForNewGame();
         }
         break;
@@ -276,14 +264,13 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
 
 void Game::drawGame(sf::RenderWindow& window)
 {
-
     window.clear();
 
-    //Draw everything
     switch (m_state)
     {
     case Game::gameStates::chooseDifficulty:
     {
+        window.draw(m_titleSprite);
         for (auto text : m_textVector)
         {
             window.draw(text);
@@ -291,15 +278,52 @@ void Game::drawGame(sf::RenderWindow& window)
         break;
     }
 
-
-
-
     case Game::gameStates::gamePlay:
     {
-        // Draw the topBar
+        //  Here draw the top bar aka the whole view
+        window.setView(m_wholeWindowView);
         window.draw(m_topBar);
         window.draw(m_smileySprite);
-        
+        window.draw(m_1numberMine.getSprite());
+        window.draw(m_10numberMine.getSprite());
+        window.draw(m_100numberMine.getSprite());
+        window.draw(m_1numberTime.getSprite());
+        window.draw(m_10numberTime.getSprite());
+        window.draw(m_100numberTime.getSprite());
+
+        float yPos = 60.0f / window.getSize().y; // equals about 0.2f the ratio we need to change the gameRegionView with
+
+         // This works somehow, I dont understand why because we should NOT include the + 60
+         //EXPLANATION:
+         // I think it works because now the viewPort is actually larger than the window (yPos + 1).
+         // But the size is same as the whole window so the bottom of the view is actually outside of the window I think.
+        //m_gameRegionView.setSize(sf::Vector2f(320, 256 + 60));
+        //m_gameRegionView.setCenter(160, 158);
+        //m_gameRegionView.setViewport(sf::FloatRect(0, yPos, 1, 1));
+
+        // Test this also works somehow but I dont understand why. we should not do 1-yPos???
+        // //Explanation:
+        // SO floatRect is sf::FloatRect(origin.x, origin.y, size.width, size.height) so it is correct that the first argument is 0 since we 
+        // want to start from the left edge and the 2nd arugment ypos is also correct because wa want to start the view right below the topBar which is 60pixels 
+        // so with a unit system we need to start from 60/window.width (about 0.19)
+        // the third argument represents the width size and since we start at 0 and we use up the whole size of the x axis it should be 1.
+        // the 4th argument is the height size. And if we put the 4th argument to one, which means the size of the whole window we would go too far. 
+        // We would go too far because we started at 0.19 and if we then go 1, i.e. another whole window, that would be too far (1+0.19)
+        // That would result in the view being stretched and some cells would be outside of the window.
+        // Im pretty sure the 4th argument 1 represents 100% of the window size. so if we try to draw our minefield which is only 256 in height over (256 + 60) pixels,
+        // it would have to be stretched out.
+        m_gameRegionView.setViewport(sf::FloatRect(0, yPos, 1, 1 - yPos)); //we want our view to cover from below the top bar to the end of the window
+
+        float xSize = window.getSize().x;
+        float ySize = window.getSize().y * (1 - yPos);
+
+        m_gameRegionView.setSize(sf::Vector2f(window.getSize().x, window.getSize().y*(1-yPos))); // same width but since we changed the height we need to compensate for that here
+        float xPosition = window.getSize().x / 2;
+        float yPosition = window.getSize().y * (1 - yPos) / 2;
+        m_gameRegionView.setCenter(window.getSize().x/2, window.getSize().y*(1-yPos)/2); // but the view in the center so width/2 and half of our new height
+        // This solution is more intuitive ^^.
+
+        window.setView(m_gameRegionView); // set the view before we draw
 
         // Draw the m_cellVector cells        
         for (int i = 0 ; i < m_boardSize.x ;i++) 
@@ -310,35 +334,24 @@ void Game::drawGame(sf::RenderWindow& window)
                 window.draw(m_cellVector[index].getSprite());
             }
         }
-        window.draw(m_100Number);
-        //std::cout << m_nrOfFlags << std::endl;
-
-       //  Draw what should appear when we click a square (debugging)
-        //for (int i = 0 ; i < (m_boardSize.x * m_boardSize.y) ; i ++)
-        //{
-        //     //BaseSprite::cellId element = m_cellTypeVector[i];
-        //    //if (element == BaseSprite::cellId::MINE)
-        //    //{
-        //    //    m_cellVector[i].setSprite(BaseSprite::cellId::MINE);
-        //    //    window.draw(m_cellVector[i].getSprite());
-        //    //}
-        //     m_cellVector[i].setSprite(m_cellTypeVector[i]);
-        //     window.draw(m_cellVector[i].getSprite());
-        //    
-        //}
-
-        //Draw the cell that we click on.
-
-
         break;
     }
 
+
     case Game::gameStates::gameOver:
     {
+        window.setView(m_wholeWindowView);
         // Draw the topBar
         window.draw(m_topBar);
         window.draw(m_smileySprite);
+        window.draw(m_1numberMine.getSprite());
+        window.draw(m_10numberMine.getSprite());
+        window.draw(m_100numberMine.getSprite());
+        window.draw(m_1numberTime.getSprite());
+        window.draw(m_10numberTime.getSprite());
+        window.draw(m_100numberTime.getSprite());
 
+        window.setView(m_gameRegionView);
         // Draw the m_cellVector cells        
         for (int i = 0; i < m_boardSize.x; i++)
         {
@@ -351,23 +364,20 @@ void Game::drawGame(sf::RenderWindow& window)
         break;
     }
 
-
     default:
         break;
     }
 
-
-
-
-
     window.display();
-
-
 }
 
 void Game::interact(sf::RenderWindow& window)
 {
     sf::Event event;
+
+    //reset variable
+    m_worldMousePosClick.x = -0.0f;
+    m_worldMousePosClick.y = -0.0f;
 
     while (window.pollEvent(event))
     {
@@ -376,34 +386,98 @@ void Game::interact(sf::RenderWindow& window)
             window.close();
         }
 
-        if (event.type == sf::Event::Resized)
+        switch (m_state)
         {
-            sf::FloatRect visibleArea(0, 0, event.size.width, event.size.height);
-            window.setView(sf::View(visibleArea));
-        }
-
-        if (event.type == sf::Event::MouseButtonPressed)
-        {
-            if (event.mouseButton.button == sf::Mouse::Left)
+            case Game::gameStates::chooseDifficulty:
             {
-                sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
-                sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
-                m_worldMousePosClick = window.mapPixelToCoords(mousePos);
-                //std::cout << "left Mouse Button Pressed" << std::endl;
+                if (event.type == sf::Event::MouseButtonPressed)
+                {
+                    if (event.mouseButton.button == sf::Mouse::Left)
+                    {
+                        sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                        sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
+                        m_worldMousePosClick = window.mapPixelToCoords(mousePos);
+                    }
+                }
+                break;
             }
             
 
-            if (event.mouseButton.button == sf::Mouse::Right)
+            case Game::gameStates::gamePlay:
             {
-                sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
-                sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
-                m_worldMousePosClickRight = window.mapPixelToCoords(mousePos);
-            }
-        }
+                if (event.type == sf::Event::MouseButtonPressed)
+                {
+                    //check which view we are in
+                    m_worldMousePos = sf::Mouse::getPosition(window); // Current mouse position
+                    
+                    if (event.mouseButton.button == sf::Mouse::Left)
+                    {
+                        sf::FloatRect viewBounds = getViewBounds(m_gameRegionView);
+                       
+                        if(m_worldMousePos.y > 60.f)
+                        {
+                            window.setView(m_gameRegionView);
+                            sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                            sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
+                            m_gameRegionMousePosClick = window.mapPixelToCoords(mousePos);
+                        }
+                        else
+                        {
+                            window.setView(m_wholeWindowView);
+                            sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                            sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
+                            m_worldMousePosClick = window.mapPixelToCoords(mousePos);
+                        }
+                    }
 
-        if (event.type == sf::Event::MouseButtonReleased)
-        {
-           
+                    if (event.mouseButton.button == sf::Mouse::Right)
+                    {
+                        sf::FloatRect viewBounds = getViewBounds(m_gameRegionView);
+                        if (m_worldMousePos.y > 60.f)
+                        {
+                            window.setView(m_gameRegionView);
+                            sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                            sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
+                            m_worldMousePosClickRight = window.mapPixelToCoords(mousePos);
+                        }
+                        else
+                        {
+                            window.setView(m_wholeWindowView);
+                            sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                            sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
+                            m_worldMousePosClickRight = window.mapPixelToCoords(mousePos);
+                        }
+                    }
+                }
+
+                if (event.type == sf::Event::MouseButtonReleased)
+                {
+
+                }
+
+                break;
+            }
+            
+
+            case Game::gameStates::gameOver:
+            {
+                if (event.type == sf::Event::MouseButtonPressed)
+                {
+                    //check which view we are in
+                    m_worldMousePos = sf::Mouse::getPosition(window); // Current mouse position
+
+                    if (event.mouseButton.button == sf::Mouse::Left)
+                    {
+                        window.setView(m_wholeWindowView);
+                        sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                        sf::Vector2i worldMousePos(window.mapPixelToCoords(mousePos));
+                        m_worldMousePosClick = window.mapPixelToCoords(mousePos);
+                    }
+                }
+                break;
+            }
+            default:
+                break;
         }
     }
 }
@@ -432,7 +506,6 @@ bool Game::checkBounds(sf::Vector2i mouseCoords, sf::FloatRect bounds)
         return false;
     }
 }
-
 
 void Game::initCellVector()
 {
@@ -467,10 +540,9 @@ int Game::convertIndexFor1dVector(int x, int y)
 
 void Game::generateMines()
 {
-    //srand(time(0));
+    srand(time(0));
     for (int i = 0; i < m_numberOfMines; i++)
     {
-        
         int randomIndex = rand() % (m_boardSize.x * m_boardSize.y); + 0;
         m_cellTypeVector[randomIndex] = BaseSprite::cellId::MINE;
     }
@@ -478,39 +550,7 @@ void Game::generateMines()
 
 void Game::generateRemaningCells()
 {
-    //for (int i = 0; i < m_boardSize.x; i++)
-    //{
-    //    for (int j = 0; i < m_boardSize.y; j++)
-    //    {
-    //        int index = 
-    //    }
-    //}
     int mineCount = 0;
-    // 1D
-    /*
-    for (int i = 0; i < m_boardSize.x * m_boardSize.y; i++)
-    {
-        mineCount = giveSurroundingMineCount(i);
-
-        if (mineCount == 0)
-        {
-            // Set m_cellTypeVector index to "pressed" id
-            m_cellTypeVector[i] = BaseSprite::cellId::PRESSED;
-
-        }
-        else if(mineCount > 0 && mineCount < 9) 
-        {
-            // There is at least 1 mine so set the id to the corresponding amount of mines.
-            m_cellTypeVector[i] = (BaseSprite::cellId)mineCount; // recast to cellId
-        }
-        else
-        {
-            // We have reached a mine square, Do nothing since they are already set.
-        }
-
-    }
-    */
-
     //2d
     for (int y = 0; y < m_boardSize.y; y++)
     {
@@ -522,7 +562,6 @@ void Game::generateRemaningCells()
             {
                 // Set m_cellTypeVector index to "pressed" id
                 m_cellTypeVector[index] = BaseSprite::cellId::PRESSED;
-
             }
             else if (mineCount > 0 && mineCount < 9)
             {
@@ -533,28 +572,16 @@ void Game::generateRemaningCells()
             {
                 // We have reached a mine square, Do nothing since they are already set.
             }
-
         }
-
     }
-
-
-
-    // loop throough all cells,
-    // at each cell check the cells around it if it has any mines around it,
-    // if it has mark the curren cell with the amount of mines that surrounds it.
-    // If no mines around leave it as a "pressed" cell and move on.
-    // SKIPP cells that already has a mine!
 }
 
 int Game::giveSurroundingMineCount(int index)
 {
     if(m_cellTypeVector[index] == BaseSprite::cellId::MINE)
-    {
         return -1; // Check if the current position is a mine, in that case return -1
-    }
-    /*
     
+    /*
     +-+-+-|
     |1|2|3|
     +-+-+-+
@@ -562,19 +589,7 @@ int Game::giveSurroundingMineCount(int index)
     +-+-+-+
     |6|7|8|
     +-+-+-+
-    
     */
-
-    // get surroinding indexs
-    int topLeft = index - (m_boardSize.x + 1);
-    int top = index - m_boardSize.x;
-    int topRight = index - (m_boardSize.x - 1);
-    int left = index - 1;
-    int right = index + 1;
-    int lowerLeft = index + (m_boardSize.x - 1);
-    int lower = index + m_boardSize.x;
-    int lowerRight = index + m_boardSize.x + 1;
-    //
 
     //Put surrounding indexes into an array
     int indexArray[8];
@@ -605,10 +620,8 @@ int Game::giveSurroundingMineCount(int x, int y)
 {
     int index = convertIndexFor1dVector(x, y);
     if (m_cellTypeVector[index] == BaseSprite::cellId::MINE)
-    {
         return -1; // Check if the current position is a mine, in that case return -1
-    }
-
+    
     //Put surrounding indexes into an array
     int yArr[8] = { -1,-1,-1,0,0,+1,+1,+1 };
     int xArr[8] = { -1,0,+1,-1,+1,-1,0,+1 };
@@ -620,14 +633,13 @@ int Game::giveSurroundingMineCount(int x, int y)
         int yIndexToCheck = yArr[i] + y;
         //Check if out of range
         if (xIndexToCheck < 0 || xIndexToCheck > (m_boardSize.x - 1) || yIndexToCheck < 0 || yIndexToCheck > (m_boardSize.y - 1))
-        {
             continue; // skip this index since it is out of range.
-        }
+        
         int indexToCheck = convertIndexFor1dVector(xIndexToCheck, yIndexToCheck);
+
         if (m_cellTypeVector[indexToCheck] == BaseSprite::cellId::MINE)
             mineCount++;
     }
-
     return mineCount;
 }
 
@@ -638,7 +650,7 @@ void Game::initSmiley()
     int textureSize = 48;
     m_smileySprite.setTexture(m_textureHolder.get(TextureHolder::ID::SMILEY_COMBINED));
     m_smileySprite.setTextureRect(sf::IntRect(0, 0, textureSize, textureSize));
-    m_smileySprite.setPosition(sf::Vector2f(screenWidth / 2 - textureSize/2, screenHeight + 6));
+    m_smileySprite.setPosition(sf::Vector2f(screenWidth / 2 - textureSize/2, 6)); 
 }
 
 void Game::makeEmptyCellsVisible(int index)
@@ -648,11 +660,7 @@ void Game::makeEmptyCellsVisible(int index)
 
     // Convert the position of the clicked sprite to the index 
     int clickedIndexPosX = position.x / m_cellVector[0].getTexturePixelSize().x;
-    int clickedIndexPosY = position.y / m_cellVector[0].getTexturePixelSize().y;
-
-
-    
-
+    int clickedIndexPosY = position.y / m_cellVector[0].getTexturePixelSize().y; 
     floodFill(BaseSprite::cellId::PRESSED, clickedIndexPosX, clickedIndexPosY);
 
     for (int i = 0; i < (m_boardSize.x * m_boardSize.y); i++)
@@ -680,16 +688,17 @@ void Game::resetForNewGame()
 {
     m_state = Game::gameStates::gamePlay;
     m_smileySprite.setTextureRect(sf::IntRect(0, 0, 48, 48));
+    m_gameIsLost = false;
 
     for (int i = 0; i < (m_boardSize.x * m_boardSize.y); i++)
     {
         m_visited[i] = false;
         m_cellVector[i].setSprite(BaseSprite::cellId::UNPRESSED);
-        m_cellTypeVector[i] = BaseSprite::cellId::NO_ID;
-        
+        m_cellTypeVector[i] = BaseSprite::cellId::NO_ID;  
     }
     generateMines();
     generateRemaningCells();
+    m_timer.restart();
 }
 
 void Game::putFlagsOnRemaningCells()
@@ -703,22 +712,98 @@ void Game::putFlagsOnRemaningCells()
     }
 }
 
-void Game::initNumbers()
+void Game::initNumbers(sf::RenderWindow& window)
 {
-    m_100Number.setTexture(m_textureHolder.get(TextureHolder::ID::NUMBERS));
-    m_100Number.scale(2.5, 2.5);
-    m_100Number.setTextureRect(sf::IntRect(0, 0, 13, 23));
-    m_100Number.setPosition(0, m_boardSize.y*32+2);
+    m_1numberMine.loadSprite(TextureHolder::ID::NUMBERS);
+    m_10numberMine.loadSprite(TextureHolder::ID::NUMBERS);
+    m_100numberMine.loadSprite(TextureHolder::ID::NUMBERS);
+
+    m_1numberMine.setScale(2.5,2.5);
+    m_10numberMine.setScale(2.5, 2.5);
+    m_100numberMine.setScale(2.5, 2.5);
+
+    //I Think we need -1 because we multiply the width i.e. 13 by 2.5 which equals 32.5 so it is not pixel perfect anymor, so it gets rounded!
+    m_1numberMine.setPosition(sf::Vector2f(m_1numberMine.getTexturePixelSize().x * 2.5f * 2.f + -1, 2)); //2.5 because I made them 2.5 bigger. 
+    m_10numberMine.setPosition(sf::Vector2f(m_1numberMine.getTexturePixelSize().x *  2.5f + -1, 2));
+    m_100numberMine.setPosition(sf::Vector2f(0, 2));
+
+    // Time Numbers
+    m_1numberTime.loadSprite(TextureHolder::ID::NUMBERS);
+    m_10numberTime.loadSprite(TextureHolder::ID::NUMBERS);
+    m_100numberTime.loadSprite(TextureHolder::ID::NUMBERS);
+
+    m_1numberTime.setScale(2.5, 2.5);
+    m_10numberTime.setScale(2.5, 2.5);
+    m_100numberTime.setScale(2.5, 2.5);
     
-
-    m_10Number.setTexture(m_textureHolder.get(TextureHolder::ID::NUMBERS));
-    m_10Number.scale(4, 4);
-
-
-    m_1Number.setTexture(m_textureHolder.get(TextureHolder::ID::NUMBERS));
-    m_1Number.scale(4, 4);
-
+    m_1numberTime.setPosition(sf::Vector2f(window.getSize().x - m_1numberTime.getTexturePixelSize().x * 2.5f - 1, 2));
+    m_10numberTime.setPosition(sf::Vector2f(window.getSize().x - m_1numberTime.getTexturePixelSize().x * 2 * 2.5f - 1, 2));
+    m_100numberTime.setPosition(sf::Vector2f(window.getSize().x - m_1numberTime.getTexturePixelSize().x * 3 * 2.5f - 1, 2));
 }
+
+void Game::initTitleSprite()
+{
+    int screenWidth = m_boardSize.x * 32;
+    int screenHeight = m_boardSize.y * 32;
+    int textureSize = 48;
+    m_smileySprite.setTexture(m_textureHolder.get(TextureHolder::ID::SMILEY_COMBINED));
+    m_smileySprite.setTextureRect(sf::IntRect(0, 0, textureSize, textureSize));
+    m_smileySprite.setPosition(sf::Vector2f(screenWidth / 2 - textureSize / 2, 6));
+}
+
+void Game::initTopBar(sf::RenderWindow& window)
+{
+    m_topBar.setSize(sf::Vector2f(window.getSize().x, 60)); // should be 60 pixels high
+    m_topBar.setPosition(0, 0);
+    m_topBar.setFillColor(sf::Color::White);
+}
+
+sf::FloatRect Game::getViewBounds(const sf::View& view)
+{
+    sf::FloatRect rt;
+    rt.left = view.getCenter().x - view.getSize().x / 2.f;
+    rt.top = view.getCenter().y - view.getSize().y / 2.f;
+    rt.width = view.getSize().x;
+    rt.height = view.getSize().y;
+    return rt;
+}
+
+void Game::setCorrectMineNumberSpriteTexture(int number, Numbers& number100, Numbers& number10, Numbers& number1)
+{
+    std::string str = std::to_string(number);
+    switch (str.length())
+    {
+    case 1:
+        number1.setNumberSprite(convertCharNrToNumberId(str[0]));
+        number10.setNumberSprite(Numbers::numberId::NO_NUMBER);
+        number100.setNumberSprite(Numbers::numberId::NO_NUMBER);
+        break;
+    case 2:
+        number1.setNumberSprite(convertCharNrToNumberId(str[1]));
+        number10.setNumberSprite(convertCharNrToNumberId(str[0]));
+        number100.setNumberSprite(Numbers::numberId::NO_NUMBER);
+        break;
+    case 3:
+        number1.setNumberSprite(convertCharNrToNumberId(str[2]));
+        number10.setNumberSprite(convertCharNrToNumberId(str[1]));
+        number100.setNumberSprite(convertCharNrToNumberId(str[0]));
+        break;
+    default:
+        break;
+    }
+}
+
+
+Numbers::numberId Game::convertCharNrToNumberId(char c)
+{
+    if (c == '-')
+        return Numbers::numberId::DASH;
+    if (c == '0')
+        return Numbers::numberId::ZERO;
+
+    return (Numbers::numberId)(c - '0');
+}
+
 
 void Game::drawClickedCell(int index)
 {
@@ -741,8 +826,6 @@ bool Game::floodFill(BaseSprite::cellId target, int x, int y)
     if (m_cellTypeVector[index] != target) // ignore cells that are not the target ( i.e. PRESSED)
         return false;
 
-
-
     // If it passes those tests then its a legit PRESSED square.
     // We should mark it and all surrounding squares as "visible"
 
@@ -757,5 +840,5 @@ bool Game::floodFill(BaseSprite::cellId target, int x, int y)
     retVal |= floodFill(target, x, y + 1);
     retVal |= floodFill(target, x + 1 , y + 1);
     return retVal;
-
 }
+
