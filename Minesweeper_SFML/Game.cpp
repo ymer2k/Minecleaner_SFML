@@ -234,18 +234,20 @@ void Game::update(sf::Time dt, sf::RenderWindow& window)
                     unpressedCells++;
             }
 
-            if (unpressedCells == m_numberOfMines)
+            if (unpressedCells == m_numberOfMines) // if we have squares left and ALL are mines, then we won!
             {
                 // Victory! Move to gameOver screen
                 m_smileySprite.setTextureRect(sf::IntRect(0, 48, 48, 48));
                 putFlagsOnRemaningCells();
                 m_state = Game::gameStates::gameOver;
                 m_nrOfFlags = m_numberOfMines; // Just to make sure we display the correct nr here because we automatically set flags
-           // when we finish the game when unpressed cells == numberOfMines.
+                // when we finish the game when unpressed cells == numberOfMines.
             }
             else
                 unpressedCells = 0;        
         }
+        setCorrectMineNumberSpriteTexture(m_numberOfMines - m_nrOfFlags, m_100numberMine, m_10numberMine, m_1numberMine);
+        setCorrectMineNumberSpriteTexture(timeElapsed, m_100numberTime, m_10numberTime, m_1numberTime);
         break;
     }
     case Game::gameStates::gameOver:
