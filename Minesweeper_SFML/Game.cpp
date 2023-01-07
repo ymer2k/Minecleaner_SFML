@@ -543,10 +543,14 @@ int Game::convertIndexFor1dVector(int x, int y)
 void Game::generateMines()
 {
     srand(time(0));
-    for (int i = 0; i < m_numberOfMines; i++)
+    int i = 0;
+    while (i < m_numberOfMines)
     {
-        int randomIndex = rand() % (m_boardSize.x * m_boardSize.y); + 0;
+        int randomIndex = rand() % (m_boardSize.x * m_boardSize.y);
+        if (m_cellTypeVector[randomIndex] == BaseSprite::cellId::MINE)
+            continue;
         m_cellTypeVector[randomIndex] = BaseSprite::cellId::MINE;
+        i++;
     }
 }
 
